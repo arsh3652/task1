@@ -1,14 +1,18 @@
+#scanning files everytime 
+#first time scan creates the excel file    
+#second and later added files is only scanned and updates in excel file 
+
 import os
 import json
 from datetime import datetime
 import pandas as pd
 from tkinter import Tk, filedialog
 
-STATE_FILE = "scan_state.json"
+STATE_FILE = "scan_state.json"          #to track locally
 REPORT_FILE = "folder_scan_report.xlsx"
 
 
-def get_creation_date(path):
+def get_creation_date(path):            #converting raw ctime to readable ctime 
     try:
         return datetime.fromtimestamp(os.path.getctime(path))
     except Exception:
@@ -16,16 +20,16 @@ def get_creation_date(path):
 
 
 def load_last_scan(folder_path):
-    state_path = os.path.join(folder_path, STATE_FILE)
+    state_path = os.path.join(folder_path, STATE_FILE)  #building path to JSON file
 
-    if not os.path.exists(state_path):
-        return datetime.min
+    if not os.path.exists(state_path):          #if not exist
+        return datetime.min                     #return earliest possible
 
     try:
-        with open(state_path, "r") as f:
+        with open(state_path, "r") as f:         #if already exist read file
             state = json.load(f)
 
-        return datetime.fromisoformat(state["last_scan"])
+        return datetime.fromisoformat(state["last_scan"])        #converting ISO string to datetime obj
 
     except Exception:
         return datetime.min
@@ -36,7 +40,7 @@ def save_last_scan(folder_path, scan_time):
 
     with open(state_path, "w") as f:
         json.dump(
-            {"last_scan": scan_time.isoformat()},
+            {"last_scan": scan_time.isoformat()},  #JSON stores date time in ISO format
             f,
             indent=4
         )
@@ -82,16 +86,16 @@ def scan_folder(folder_path, last_scan):
 def save_to_excel(data, folder_path):
     report_path = os.path.join(folder_path, REPORT_FILE)
 
-    new_df = pd.DataFrame(data)
+    new_df = pd.DataFrame(data)   #converting into dataframes 
 
     if new_df.empty:
-        print("No new files or folders found.")
+        print("No new files or folders found.")   #exit if no new items 
         return
 
     if os.path.exists(report_path):
         existing_df = pd.read_excel(report_path)
 
-        combined_df = pd.concat(
+        combined_df = pd.concat(    #append new items to the file 
             [existing_df, new_df],
             ignore_index=True
         )
@@ -170,3 +174,9 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
+
+
+
