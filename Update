@@ -1,127 +1,9 @@
-#scanning files everytime 
-#first time scan creates the excel file    
-#second and later added files is only scanned and updates in excel file 
-
 import os
-import json
 from datetime import datetime
 import pandas as pd
 from tkinter import Tk, filedialog
 
-STATE_FILE = "scan_state.json"          #to track locally
 REPORT_FILE = "folder_scan_report.xlsx"
-
-
-def get_creation_date(path):            #converting raw ctime to readable ctime 
-    try:
-        return datetime.fromtimestamp(os.path.getctime(path))
-    except Exception:
-        return None
-
-
-def load_last_scan(folder_path):
-    state_path = os.path.join(folder_path, STATE_FILE)  #building path to JSON file
-
-    if not os.path.exists(state_path):          #if not exist
-        return datetime.min                     #return earliest possible
-
-    try:
-        with open(state_path, "r") as f:         #if already exist read file
-            state = json.load(f)
-
-        return datetime.fromisoformat(state["last_scan"])        #converting ISO string to datetime obj
-
-    except Exception:
-        return datetime.min
-
-
-def save_last_scan(folder_path, scan_time):
-    state_path = os.path.join(folder_path, STATE_FILE)
-
-    with open(state_path, "w") as f:
-        json.dump(
-            {"last_scan": scan_time.isoformat()},  #JSON stores date time in ISO format
-            f,
-            indent=4
-        )
-
-
-def scan_folder(folder_path, last_scan):
-    data = []
-
-    for root, dirs, files in os.walk(folder_path):
-
-        for folder in dirs:
-            folder_full_path = os.path.join(root, folder)
-
-            creation_date = get_creation_date(folder_full_path)
-
-            if creation_date and creation_date > last_scan:
-                data.append({
-                    "Name": folder,
-                    "Type": "Folder",
-                    "Full Path": folder_full_path,
-                    "Creation Date": creation_date
-                })
-
-        for file in files:
-            if file in [REPORT_FILE, STATE_FILE]:
-                continue
-
-            file_full_path = os.path.join(root, file)
-
-            creation_date = get_creation_date(file_full_path)
-
-            if creation_date and creation_date > last_scan:
-                data.append({
-                    "Name": file,
-                    "Type": "File",
-                    "Full Path": file_full_path,
-                    "Creation Date": creation_date
-                })
-
-    return data
-
-
-def save_to_excel(data, folder_path):
-    report_path = os.path.join(folder_path, REPORT_FILE)
-
-    new_df = pd.DataFrame(data)   #converting into dataframes 
-
-    if new_df.empty:
-        print("No new files or folders found.")   #exit if no new items 
-        return
-
-    if os.path.exists(report_path):
-        existing_df = pd.read_excel(report_path)
-
-        combined_df = pd.concat(    #append new items to the file 
-            [existing_df, new_df],
-            ignore_index=True
-        )
-    else:
-        combined_df = new_df
-
-    combined_df["Creation Date"] = pd.to_datetime(
-        combined_df["Creation Date"],
-        errors="coerce"
-    )
-
-    combined_df = combined_df.sort_values(
-        by="Creation Date"
-    )
-
-    combined_df["Creation Date"] = combined_df[
-        "Creation Date"
-    ].dt.strftime("%Y-%m-%d %H:%M:%S")
-
-    combined_df.to_excel(
-        report_path,
-        index=False
-    )
-
-    print(f"Added {len(new_df)} new items.")
-    print(f"Report updated: {report_path}")
 
 
 def choose_folder():
@@ -137,26 +19,148 @@ def choose_folder():
     return folder
 
 
+def scan_folder(folder_path):
+
+    data = []
+
+    for root, dirs, files in os.walk(folder_path):
+
+        # Folders
+        for folder in dirs:
+
+            full_path = os.path.join(
+                root,
+                folder
+            )
+
+            try:
+
+                modified = datetime.fromtimestamp(
+                    os.path.getmtime(
+                        full_path
+                    )
+                )
+
+                data.append({
+                    "Type": "Folder",
+                    "Name": folder,
+                    "Full Path": full_path,
+                    "Modified Date": modified
+                })
+
+            except Exception:
+                pass
+
+        # Files
+        for file in files:
+
+            if file == REPORT_FILE:
+                continue
+
+            full_path = os.path.join(
+                root,
+                file
+            )
+
+            try:
+
+                modified = datetime.fromtimestamp(
+                    os.path.getmtime(
+                        full_path
+                    )
+                )
+
+                size = os.path.getsize(
+                    full_path
+                )
+
+                data.append({
+                    "Type": "File",
+                    "Name": file,
+                    "Full Path": full_path,
+                    "Size (Bytes)": size,
+                    "Modified Date": modified
+                })
+
+            except Exception:
+                pass
+
+    return data
+
+
+def save_to_excel(
+    data,
+    folder_path
+):
+
+    report_path = os.path.join(
+        folder_path,
+        REPORT_FILE
+    )
+
+    df = pd.DataFrame(data)
+
+    if df.empty:
+
+        print(
+            "No files or folders found."
+        )
+
+        return
+
+    df["Modified Date"] = pd.to_datetime(
+        df["Modified Date"],
+        errors="coerce"
+    )
+
+    df = df.sort_values(
+        by="Modified Date",
+        ascending=True
+    )
+
+    df["Modified Date"] = (
+        df["Modified Date"]
+        .dt.strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+    )
+
+    df.to_excel(
+        report_path,
+        index=False
+    )
+
+    print(
+        f"Report updated:\n{report_path}"
+    )
+
+    print(
+        f"Total items scanned: {len(df)}"
+    )
+
+
 def main():
-    print("Select a folder to scan...")
+
+    print(
+        "Select folder to scan..."
+    )
 
     folder_path = choose_folder()
 
     if not folder_path:
-        print("No folder selected.")
+
+        print(
+            "No folder selected."
+        )
+
         return
 
-    last_scan = load_last_scan(folder_path)
-
-    print(f"Last scan: {last_scan}")
-
-    current_scan_time = datetime.now()
-
-    print("Scanning for newly added files/folders...")
+    print(
+        "Scanning..."
+    )
 
     data = scan_folder(
-        folder_path,
-        last_scan
+        folder_path
     )
 
     save_to_excel(
@@ -164,19 +168,10 @@ def main():
         folder_path
     )
 
-    save_last_scan(
-        folder_path,
-        current_scan_time
+    print(
+        "Done."
     )
-
-    print("Done.")
 
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
